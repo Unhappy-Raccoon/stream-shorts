@@ -1,0 +1,11 @@
+services:
+  stream-shorts:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - stream_shorts_data:/data
+    restart: unless-stopped
+volumes:
+  stream_shorts_data:
