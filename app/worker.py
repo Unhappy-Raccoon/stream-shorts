@@ -14,6 +14,8 @@ def process_one(job):
             raise ValueError(f"Source is too long ({duration:.0f}s). Limit is {settings.max_source_seconds}s")
         segments = transcribe(source, settings.whisper_model)
         picks = score_segments(segments, settings.clip_min_seconds, settings.clip_max_seconds)
+        # MVP cap: max candidate clips per source job. Daily publication cap is applied by scheduler later.
+        picks = picks[:settings.clips_per_day]
         clips_dir = settings.data_dir / "clips"
         clips_dir.mkdir(parents=True, exist_ok=True)
         for n, (_, start, end, text) in enumerate(picks, start=1):
