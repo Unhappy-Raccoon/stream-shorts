@@ -28,7 +28,7 @@ def dashboard():
     with connect() as c:
         jobs = c.execute("SELECT * FROM jobs ORDER BY id DESC LIMIT 50").fetchall()
         clips = c.execute("SELECT * FROM clips ORDER BY id DESC LIMIT 100").fetchall()
-    html = "<h1>Stream Shorts — Review queue</h1><p>Clips require review before publishing. Submit a source using the API.</p><h2>Jobs</h2><table border='1' cellpadding='8'><tr><th>ID</th><th>Source</th><th>Status</th><th>Details</th></tr>"
+    html = "<h1>Stream Shorts — Review queue</h1><p>Clips require review before publishing. Submit sources using the API. Review actions are available through the API.</p><h2>Jobs</h2><table border='1' cellpadding='8'><tr><th>ID</th><th>Source</th><th>Status</th><th>Details</th></tr>"
     for j in jobs:
         html += f"<tr><td>{j['id']}</td><td>{j['source_url']}</td><td>{j['status']}</td><td>{j['error'] or ''}</td></tr>"
     html += "</table><h2>Clips</h2><table border='1' cellpadding='8'><tr><th>ID</th><th>Job</th><th>Title</th><th>Timecode</th><th>Status</th><th>Preview</th></tr>"
@@ -61,6 +61,31 @@ async def upload(file: UploadFile = File(...), x_admin_token: str = Header(defau
     with connect() as c:
         cur = c.execute("INSERT INTO jobs(source_url,status) VALUES(?, 'queued')", (target.as_uri(),))
         return {"job_id": cur.lastrowid, "status": "queued"}
+
+@app.get("/api/clips")
+def list_clips(status: str = "review", x_admin_token: str = Header(default="")):
+    auth(x_admin_token)
+    with connect() as c:
+        rows = c.execute("SELECT id,job_id,title,start_seconds,end_seconds,transcript,status,created_at FROM clips WHERE status=? ORDER BY id DESC", (status,)).fetchall()
+    return [dict(row) for row in rows]
+
+@app.post("/api/clips/{clip_id}/approve")
+def approve_clip(clip_id: int, x_admin_token: str = Header(default="")):
+    auth(x_admin_token)
+    with connect() as c:
+        cur = c.execute("UPDATE clips SET status='approved' WHERE id=? AND status='review'", (clip_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Clip not found or not awaiting review")
+    return {"clip_id": clip_id, "status": "approved", "note": "Approval is recorded. Publishing is not connected in this MVP."}
+
+@app.post("/api/clips/{clip_id}/reject")
+def reject_clip(clip_id: int, x_admin_token: str = Header(default="")):
+    auth(x_admin_token)
+    with connect() as c:
+        cur = c.execute("UPDATE clips SET status='rejected' WHERE id=? AND status='review'", (clip_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Clip not found or not awaiting review")
+    return {"clip_id": clip_id, "status": "rejected"}
 
 @app.get("/clips/{clip_id}")
 def clip_file(clip_id: int):
